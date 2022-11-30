@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>
+      0169; # 'field' is never used
+      8019; # Unnecessary using directive.  
+      8618; # make Nullable suggestion 
+      0219; # 'field' is assigned but its value is never used
+    </NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Combinatorics" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ShellProgressBar" Version="5.2.0" />
+  </ItemGroup>
+</Project>
