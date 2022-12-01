@@ -113,7 +113,7 @@ class Statics {
     public static uint n_take_r(uint n, uint r, bool order_matters=false, bool with_replacement=false) {  
         if (order_matters)  //  order matters; we're counting "permutations" 
             if (with_replacement) 
-                return n^r;
+                return (uint)Pow(n,r);
             else //  no replacement
                 return factorial(n) / factorial(n-r);  //  this = factorial(n) when r=n
         else //  we're counting "combinations" where order doesn't matter; there are less of these 
@@ -506,7 +506,7 @@ struct App{
     public App(GameState game) {
         var (lookups, saves) = game.counts();
         var bar = new ProgressBar(lookups,"...",ConsoleColor.Gray); 
-        var ev_cache = new ChoiceEV[2^30]; // 2^30 slots hold all unique game states
+        var ev_cache = new ChoiceEV[(int)Pow(2,30)]; // 2^30 slots hold all unique game states
         this.game = game;
         this.ev_cache = ev_cache;
         this.bar = bar;
