@@ -44,7 +44,8 @@ var slots = new Slots(1,2,3,10);
 Init();//blech
 var state = new GameState(new DieVals(1,2,3,4,5), new Slots(2), 0, 1, false);
 var app = new App(state);
-Write(app.ev_cache[state.id]);
+app.build_cache();
+WriteLine(app.ev_cache[state.id]);
 
 // main();
 
@@ -83,28 +84,18 @@ class Statics {
     public const byte THREE_OF_A_KIND = 0x7; public const byte FOUR_OF_A_KIND = 0x8; public const byte FULL_HOUSE = 0x9; 
 
 
-    public static f32[,] OUTCOME_EVS_BUFFER;
-    public static u16[,] NEWVALS_DATA_BUFFER;
-    public static f32[,] EVS_TIMES_ARRANGEMENTS_BUFFER; 
-    public static DieValsID[] SORTED_DIEVALS;
-    public static int[] RANGE_IDX_FOR_SELECTION;
-    public static IEnumerable[] SELECTION_RANGES;
-    public static Outcome[] OUTCOMES ; 
-    public static u16[] OUTCOME_DIEVALS_DATA;
-    public static u16[] OUTCOME_MASK_DATA;
-    public static f32[] OUTCOME_ARRANGEMENTS;
+    public static f32[,] OUTCOME_EVS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
+    public static u16[,] NEWVALS_DATA_BUFFER = new u16[1683,Environment.ProcessorCount]; 
+    public static f32[,] EVS_TIMES_ARRANGEMENTS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
+    public static DieValsID[] SORTED_DIEVALS= sorted_dievals();
+    public static int[] RANGE_IDX_FOR_SELECTION=new int[] {0,1,2,3,7,4,8,11,17,5,9,12,20,14,18,23,27,6,10,13,19,15,21,24,28,16,22,25,29,26,30,31}; 
+    public static IEnumerable[] SELECTION_RANGES= selection_ranges(); 
+    public static Outcome[] OUTCOMES= new Outcome[1683] ;   
+    public static u16[] OUTCOME_DIEVALS_DATA= new u16[1683];  //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
+    public static u16[] OUTCOME_MASK_DATA= new u16[1683] ;
+    public static f32[] OUTCOME_ARRANGEMENTS= new f32[1683] ;
 
     public static void Init() { // TODO best way?
-        OUTCOME_EVS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
-        NEWVALS_DATA_BUFFER = new u16[1683,Environment.ProcessorCount]; 
-        EVS_TIMES_ARRANGEMENTS_BUFFER  = new f32[1683,Environment.ProcessorCount]; 
-        SORTED_DIEVALS = sorted_dievals();
-        RANGE_IDX_FOR_SELECTION=new int[] {1,2,3,7,4,8,11,17,5,9,12,20,14,18,23,27,6,10,13,19,15,21,24,28,16,22,25,29,26,30,31,32}; 
-        SELECTION_RANGES= selection_ranges(); 
-        OUTCOMES = new Outcome[1683] ; 
-        OUTCOME_DIEVALS_DATA = new u16[1683] ; //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
-        OUTCOME_MASK_DATA = new u16[1683] ;
-        OUTCOME_ARRANGEMENTS = new f32[1683] ;
         cache_roll_outcomes_data(); 
     }
 
@@ -126,7 +117,7 @@ class Statics {
     // this generates the ranges that correspond to the outcomes, within the set of all outcomes, indexed by a give selection 
     private static IEnumerable[] selection_ranges() {
         var sel_ranges = new IEnumerable[32];
-        int s = 1;
+        int s = 0;
         sel_ranges[0] = Range(0,1);
         var combos = (new List<int>(){0,1,2,3,4}).powerset();
 
@@ -205,8 +196,7 @@ class Statics {
 
     // returns a range which corresponds the precomputed dice roll outcome data corresponding to the given selection
     public static IEnumerable outcomes_range_for_selection(Selection selection) {
-        var one_based_idx = selection + 1; // selection bitfield is 0 to 31 but Julia indexes are from 1 to 32 // TODO: valid in C#?
-        var idx = RANGE_IDX_FOR_SELECTION[one_based_idx];
+        var idx = RANGE_IDX_FOR_SELECTION[selection];
         var range = SELECTION_RANGES[idx]; // for @inbounds, see https://blog.tedd.no/2020/06/01/faster-c-array-access/
         return range;
     } 
@@ -567,19 +557,19 @@ struct App{
                         // # for each rolls remaining
                         foreach (u8 rolls_remaining in new u8[]{0,1,2,3}) {
 
-                            IEnumerable dieval_combos = rolls_remaining==3? placeholder_dievals_vec : all_dieval_combos;
+                            IEnumerable<DieVals> dieval_combos = rolls_remaining==3? placeholder_dievals_vec : all_dieval_combos;
 
                             foreach (var dieval_combo in dieval_combos) { /*Threads.@threads :static*/ 
-                                // process_dieval_combo!(
-                                //     rolls_remaining,
-                                //     slots_len,
-                                //     slots,
-                                //     dieval_combo,
-                                //     joker_rules_in_play,
-                                //     yahtzee_bonus_available,
-                                //     upper_total,
-                                //     placeholder_dievals
-                                // );
+                                process_dieval_combo(
+                                    rolls_remaining,
+                                    slots_len,
+                                    slots,
+                                    dieval_combo,
+                                    joker_rules_in_play,
+                                    yahtzee_bonus_available,
+                                    upper_total,
+                                    placeholder_dievals
+                                );
                             } // for die_combo in die_combos
 
                         } // for each rolls_remaining
@@ -591,7 +581,7 @@ struct App{
     
     }
 
-    void process_dieval_combo(u8 rolls_remaining, u8 slots_len, Slots slots, DieVals dieval_combo, bool joker_rules_in_play, 
+    void process_dieval_combo(u8 rolls_remaining, int slots_len, Slots slots, DieVals dieval_combo, bool joker_rules_in_play, 
                               bool yahtzee_bonus_available, u8 upper_total, DieVals placeholder_dievals) { 
 
         var threadid = 0; //TODO implement actual C# threading // threadid = Threads.threadid()
@@ -709,14 +699,15 @@ struct App{
             yahtzee_bonus_available 
         ).id;
 
-        foreach (u32 i in range ){ //@inbounds 
+        foreach (int i in range ){ //@inbounds 
             //= gather sorted =#
-                u32 newvals_datum = NEWVALS_DATA_BUFFER[i, threadid];
+                var u = (u32)i;
+                u32 newvals_datum = NEWVALS_DATA_BUFFER[u, threadid];
                 u32 sorted_dievals_id = SORTED_DIEVALS[newvals_datum].id;
             //= gather ev =#
                 u32 state_to_get_id = floor_state_id | sorted_dievals_id;
                 var cache_entry = ev_cache[state_to_get_id];
-                OUTCOME_EVS_BUFFER[i, threadid] = cache_entry.ev;
+                OUTCOME_EVS_BUFFER[u, threadid] = cache_entry.ev;
         } 
 
         foreach(int i in range) {// we looped through die "combos" but we need to average all "perumtations" // @fastmath @inbounds @simd ivdep 
