@@ -6,6 +6,7 @@ using static System.Math;
 using static System.Linq.Enumerable;
 using static Statics;
 using static System.Console;
+using System.Text; 
 using ShellProgressBar;
 //using System.Collections.Generic;
 
@@ -28,27 +29,16 @@ using Slot = System.Byte;
 // Test code 
 // -------------------------------------------------
 
-// var dv = new DieVals(1,2,3,4,5); 
-// foreach (var d in dv) Console.WriteLine(d);
-char[] arr = new char[] {'a', 'b', 'c'};
-var output = arr.enumerate();
-var slots = new Slots(1,2,3,10);
-// var doeshave = slots.has(2); 
-// var tots = Slots.useful_upper_totals(slots);
-// var removed = slots.removed(2);
-// var doeshavenow = removed.has(2); 
-// var slots2 = new Slots(1);
-
-
-
 Init();//blech
-var game = new GameState(new DieVals(3,4,4,6,6), new Slots(6,12), 0, 1, false);
+var game = new GameState(new DieVals(1,2,3,4,5), new Slots(YAHTZEE), 0, 1, false);
 var app = new App(game);
 app.build_cache();
 var result = app.ev_cache[game.id];
 WriteLine();
 WriteLine();
-WriteLine(result.ev);
+WriteLine();
+WriteLine(6.0/7776.0);
+WriteLine(result.ev*50);
 
 // main();
 
@@ -209,20 +199,21 @@ class Statics {
     // D,01111,65411,2,31,Y,1_3_4_6_7_8_11_,119.23471
     // S,13,66641,0,11,Y,3_4_5_9_10_13_,113.45208
     public static void print_state_choice(GameState state, ChoiceEV choice_ev) { 
-        var sb = new System.Text.StringBuilder("", 50);
+        var sb = new StringBuilder("", 50);
         if (state.rolls_remaining==0){ // for slot choice 
-            sb.Append('S',',');
+            sb.Append("S"); sb.Append(",");
             sb.Append(choice_ev.choice); // for dice choice 
         } else {
-            sb.Append('D',',');
+            sb.Append("D"); sb.Append(",");
             var str = Convert.ToString(choice_ev.choice,2);
             sb.Append(str.Substring(str.Length-5)) ;
         }
-        sb.Append(',');
+        sb.Append(",");
+        sb.Append(state.sorted_dievals.ToString()); sb.Append(",");
         sb.Append(state.rolls_remaining); sb.Append(",");
         sb.Append(state.upper_total); sb.Append(",");
         sb.Append(state.yahtzee_bonus_avail ? 1 : 0); sb.Append(",");
-        sb.Append(from s in state.open_slots select s.ToString()+'_'); sb.Append(",");
+        sb.Append(state.open_slots.ToString()); sb.Append(",");
         sb.Append(choice_ev.ev);
         WriteLine(sb);
     } 
@@ -478,7 +469,7 @@ struct App{
     // return a newly initialized app
     public App(GameState game) {
         var (lookups, saves) = game.counts();
-        var bar = new ProgressBar(lookups,"...",ConsoleColor.Gray); 
+        var bar = new ProgressBar(lookups,"",new ProgressBarOptions{ DenseProgressBar=true, CollapseWhenFinished=true, }); 
         var ev_cache = new ChoiceEV[(int)Pow(2,30)]; // 2^30 slots hold all unique game states
         this.game = game;
         this.ev_cache = ev_cache;
@@ -487,8 +478,8 @@ struct App{
 
     static void output_state_choice(GameState state, ChoiceEV choice_ev){ 
         // Uncomment below for more verbose progress output at the expense of speed 
-        // println(state, choice_ev, Threads.threadid() ) #.printed(state, choice_ev)
-        // print_state_choice(state,choice_ev)
+        // WriteLine(state, choice_ev, Thread.CurrentThread.Name ); //.printed(state, choice_ev)
+        print_state_choice(state,choice_ev);
     } 
 
     //-------------------------------------------------------------
@@ -655,7 +646,7 @@ struct App{
                 rolls_remaining, 
                 yahtzee_bonus_available 
             ); 
-            // output_state_choice(this, state_to_set, best);
+            output_state_choice(state_to_set, best);
             ev_cache[state_to_set.id] = best;
 
         }// if rolls_remaining...  
@@ -745,6 +736,12 @@ struct DieVals : IReadOnlyList<DieVal>{ // TODO some way to make this lightweigh
             yield return this[idx];
             idx++;
         }
+    }
+
+    public override string ToString() { 
+        var sb = new StringBuilder(5);
+        foreach (var dieval in this) { sb.Append(dieval.ToString()); }
+        return sb.ToString(); 
     }
 }
 
@@ -856,6 +853,12 @@ struct Slots : IReadOnlyList<Slot> {
         foreach (var s in slots) { if (6<s) break; sum+=s; } 
         return (u8)(sum*5);
     } 
+
+    public override string ToString() { 
+        var sb = new StringBuilder(30);
+        foreach (var s in this) { sb.Append(s); sb.Append("_"); }
+        return sb.ToString(); 
+    }
 
 
 }
