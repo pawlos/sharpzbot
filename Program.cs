@@ -30,16 +30,23 @@ using Slot = System.Byte;
 
 // var dv = new DieVals(1,2,3,4,5); 
 // foreach (var d in dv) Console.WriteLine(d);
-// var intarr = new char[] {'a', 'b', 'c'};
-// var output = combos_with_repl(intarr, 3);
-
-// var slots = new Slots(1,2,3,10);
+char[] arr = new char[] {'a', 'b', 'c'};
+var output = arr.perms();
+var slots = new Slots(1,2,3,10);
 // var doeshave = slots.has(2); 
 // var tots = Slots.useful_upper_totals(slots);
 // var removed = slots.removed(2);
 // var doeshavenow = removed.has(2); 
 // var slots2 = new Slots(1);
-main();
+
+
+
+Init();//blech
+var state = new GameState(new DieVals(1,2,3,4,5), new Slots(2), 0, 1, false);
+var app = new App(state);
+Write(app.ev_cache[state.id]);
+
+// main();
 
 //-------------------------------------------------------------
 // MAIN 
@@ -76,18 +83,28 @@ class Statics {
     public const byte THREE_OF_A_KIND = 0x7; public const byte FOUR_OF_A_KIND = 0x8; public const byte FULL_HOUSE = 0x9; 
 
 
-    public static f32[,] OUTCOME_EVS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
-    public static u16[,] NEWVALS_DATA_BUFFER = new u16[1683,Environment.ProcessorCount]; 
-    public static f32[,] EVS_TIMES_ARRANGEMENTS_BUFFER  = new f32[1683,Environment.ProcessorCount]; 
-    public static DieValsID[] SORTED_DIEVALS = sorted_dievals();
-    public static int[] RANGE_IDX_FOR_SELECTION=new int[] {1,2,3,7,4,8,11,17,5,9,12,20,14,18,23,27,6,10,13,19,15,21,24,28,16,22,25,29,26,30,31,32}; 
-    public static IEnumerable[] SELECTION_RANGES= selection_ranges(); 
-    public static Outcome[] OUTCOMES;
-    public static u16[] OUTCOME_DIEVALS_DATA = new u16[1683] ; //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
-    public static u16[] OUTCOME_MASK_DATA = new u16[1683] ;
-    public static f32[] OUTCOME_ARRANGEMENTS = new f32[1683] ;
+    public static f32[,] OUTCOME_EVS_BUFFER;
+    public static u16[,] NEWVALS_DATA_BUFFER;
+    public static f32[,] EVS_TIMES_ARRANGEMENTS_BUFFER; 
+    public static DieValsID[] SORTED_DIEVALS;
+    public static int[] RANGE_IDX_FOR_SELECTION;
+    public static IEnumerable[] SELECTION_RANGES;
+    public static Outcome[] OUTCOMES ; 
+    public static u16[] OUTCOME_DIEVALS_DATA;
+    public static u16[] OUTCOME_MASK_DATA;
+    public static f32[] OUTCOME_ARRANGEMENTS;
 
-    public void Init() { // TODO best way?
+    public static void Init() { // TODO best way?
+        OUTCOME_EVS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
+        NEWVALS_DATA_BUFFER = new u16[1683,Environment.ProcessorCount]; 
+        EVS_TIMES_ARRANGEMENTS_BUFFER  = new f32[1683,Environment.ProcessorCount]; 
+        SORTED_DIEVALS = sorted_dievals();
+        RANGE_IDX_FOR_SELECTION=new int[] {1,2,3,7,4,8,11,17,5,9,12,20,14,18,23,27,6,10,13,19,15,21,24,28,16,22,25,29,26,30,31,32}; 
+        SELECTION_RANGES= selection_ranges(); 
+        OUTCOMES = new Outcome[1683] ; 
+        OUTCOME_DIEVALS_DATA = new u16[1683] ; //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
+        OUTCOME_MASK_DATA = new u16[1683] ;
+        OUTCOME_ARRANGEMENTS = new f32[1683] ;
         cache_roll_outcomes_data(); 
     }
 
@@ -105,7 +122,7 @@ class Statics {
     }
 
     public static uint factorial(uint n) { 
-        if (n==1) return 1; 
+        if (n<=1) return 1; 
         return n * factorial(n);
     }
 
@@ -146,51 +163,17 @@ class Statics {
     private static DieValsID[] sorted_dievals() { 
         var vec = new DieValsID[32767];
         vec[0] = new DieValsID(); // first one is for the special wildcard 
-        var one_to_six = (from x in Range(1,6) select (u8)x).ToArray();
+        u8[] one_to_six = (from x in Range(1,6) select (u8)(x)).ToArray();
         u8 i=0;
-        var combos = combos_with_repl<u8>(one_to_six, 5);
+        var combos = one_to_six.combos_with_rep(5);
         foreach (var combo in combos) {
-            foreach (var perm in perms<u8>(combo).Distinct()) {
+            foreach (var perm in combo.perms().Distinct()) {
                 var dv_perm = new DieVals(perm[0], perm[1], perm[2], perm[3], perm[4]);
                 var dv_combo = new DieVals(combo[0], combo[1], combo[2], combo[3], combo[4]);
                 vec[dv_perm.data] = new DieValsID(dv_combo, i);
             }
         }
         return vec;
-    }
-
-    // All combinations of a combo_size in given[] of size n with repetitions. 
-    public static List<T[]> combos_with_repl<T>(T[] given, int combo_len, int given_len=-1) {
-        if (given_len==-1) given_len = given.Length;
-        var output = new List<T[]>();
-        T[] current = new T[combo_len];// Allocate memory for a given combo
-        CombosWithRepUntil(ref output, current, given, 0, combo_len, 0, given_len - 1);
-        return output;
-        void CombosWithRepUntil(ref List<T[]> output, T[] current, T[] given, int i, int combo_len, int j_start, int j_end) {
-            if (i == combo_len) {// Since index has become r, current combination is fully assembled 
-                output.Add(current.ToArray());
-                return;
-            }
-            for (int j = j_start; j <= j_end; j++) {// One by one choose all elements and recur
-                current[i] = given[j];
-                CombosWithRepUntil(ref output, current, given, i + 1, combo_len, j, j_end);
-            }
-        }
-    }
-
-    static List<T[]> perms<T> (T[] arr, int k=0, int m=-1) {
-        int i;
-        if (m==-1) m = arr.Length;
-        var output = new List<T[]>();
-        void swap (ref T a, ref T b) { T temp = a; a = b; b = temp; } 
-        if (k == m)  output.Add(arr.ToArray());
-        else 
-            for (i = k; i <= m; i++) {
-                swap (ref arr[k], ref arr[i]);
-                perms (arr, k+1, m);
-                swap (ref arr[k], ref arr[i]);
-            }
-        return output;
     }
 
     //enables syntax like: foreach (var (j, val) in enumerate(list)) { ... }
@@ -211,12 +194,12 @@ class Statics {
 
     //preps the caches of roll outcomes data for every possible 5-die selection, where '0' represents an unselected die """
     private static void cache_roll_outcomes_data() { 
-        var i=0;
+        var i=0; 
         var idx_combos = powerset(Range(1,5).ToList()); 
         var one_thru_six = new u8[]{1,2,3,4,5,6};
         foreach (var idx_combo_vec in idx_combos) { 
-            DieVal[] dievals_vec = Range(1,5).Select(_ => new DieVal()).ToArray(); 
-            foreach (u8[] dievals_combo_vec in combos_with_repl(one_thru_six, idx_combo_vec.Count)){
+            DieVal[] dievals_vec = new DieVal[5];
+            foreach (u8[] dievals_combo_vec in one_thru_six.combos_with_rep(idx_combo_vec.Count)){
                 i++;
                 var mask_vec = new u8[]{0b111,0b111,0b111,0b111,0b111};
                 foreach( var (j, val) in enumerate(dievals_combo_vec) ){
@@ -272,13 +255,52 @@ class Statics {
 }
 
 public static class Extensions { 
-     public static IEnumerable<IEnumerable<T>> Combinations<T>(this IEnumerable<T> them, int n) {
-        if (n == 0) return new[] { new T[0] } ;
-        return them.SelectMany((element, i) => 
-            them.Skip(i + 1).Combinations(n - 1)
-            .Select(combo => (new[] { element })
-            .Concat(combo)));
-     }
+
+    public static IEnumerable<IEnumerable<T>> Combinations<T>(this IEnumerable<T> them, int n) {
+    if (n == 0) return new[] { new T[0] } ;
+    return them.SelectMany((element, i) => 
+        them.Skip(i + 1).Combinations(n - 1)
+        .Select(combo => (new[] { element })
+        .Concat(combo)));
+    }
+
+    public static List<T[]> perms<T> (this T[] arr, int k=0, int m=-1) {
+        if (m==-1) m = arr.Length-1;
+        var outlist= new List<T[]>(); 
+        void swap (ref T a, ref T b) { T temp = a; a = b; b = temp; } 
+        void perms_until(T[] arr, ref List<T[]> list, int k, int m){
+            if (k == m)  list.Add(arr.ToArray()); // ToArray makes a copy
+            else 
+                for (int i = k; i <= m; i++) {
+                    swap (ref arr[k], ref arr[i]);
+                    perms_until (arr, ref list, k+1, m);
+                    swap (ref arr[k], ref arr[i]);
+                }
+        }
+        perms_until(arr, ref outlist, k, m);
+        return outlist;
+    }
+
+    // All combinations of a combo_size in given[] of size n with repetitions. 
+    public static List<T[]> combos_with_rep<T>(this T[] given, int combo_len, int given_len=-1) {
+        if (given_len==-1) given_len = given.Length;
+        var output = new List<T[]>();
+        T[] current = new T[combo_len];// Allocate memory for a given combo
+        combos_until(ref output, current, given, 0, combo_len, 0, given_len - 1);
+        return output;
+        void combos_until(ref List<T[]> output, T[] current, T[] given, int i, int combo_len, int j_start, int j_end) {
+            if (i == combo_len) {// Since index has become r, current combination is fully assembled 
+                output.Add(current.ToArray());
+                return;
+            }
+            for (int j = j_start; j <= j_end; j++) {// One by one choose all elements and recur
+                current[i] = given[j];
+                combos_until(ref output, current, given, i + 1, combo_len, j, j_end);
+            }
+        }
+    }
+
+
 }
 
 //-------------------------------------------------------------
@@ -476,9 +498,9 @@ struct Score {
 //-------------------------------------------------------------
 
 struct App{
-    GameState game;
-    ChoiceEV[] ev_cache;
-    ProgressBar bar;
+    public GameState game;
+    public ChoiceEV[] ev_cache;
+    public ProgressBar bar;
 
     // return a newly initialized app
     public App(GameState game) {
@@ -866,9 +888,14 @@ struct Slots : IReadOnlyList<Slot> {
 // Outcome
 //-------------------------------------------------------------
 struct Outcome { 
-    public DieVals dievals;
-    public DieVals mask; // stores a pre-made mask for blitting this outcome onto a GameState.DieVals.data u16 later
-    public f32 arrangements; //# how many indistinguisable ways can these dievals be arranged (ie swapping identical dievals)
+    public DieVals dievals;// = new DieVals();
+    public DieVals mask;// = new DieVals(); // stores a pre-made mask for blitting this outcome onto a GameState.DieVals.data u16 later
+    public f32 arrangements;// = 0; //# how many indistinguisable ways can these dievals be arranged (ie swapping identical dievals)
+    public Outcome() { 
+        this.dievals = new DieVals();
+        this.mask = new DieVals();
+        this.arrangements = 0;
+    }
     public Outcome(DieVals dievals, DieVals mask, f32 arrangements) {
         this.dievals = dievals;
         this.mask = mask;
