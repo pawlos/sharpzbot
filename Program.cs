@@ -30,15 +30,14 @@ using Slot = System.Byte;
 // -------------------------------------------------
 
 Init();//blech
-var game = new GameState(new DieVals(1,2,3,4,5), new Slots(YAHTZEE), 0, 1, false);
+var game = new GameState(new DieVals(3,4,4,6,6), new Slots(6,12), 0, 2, false);
 var app = new App(game);
 app.build_cache();
 var result = app.ev_cache[game.id];
 WriteLine();
 WriteLine();
 WriteLine();
-WriteLine(6.0/7776.0);
-WriteLine(result.ev*50);
+WriteLine(result.ev);
 
 // main();
 
@@ -205,7 +204,7 @@ class Statics {
             sb.Append(choice_ev.choice); // for dice choice 
         } else {
             sb.Append("D"); sb.Append(",");
-            var str = Convert.ToString(choice_ev.choice,2);
+            var str = Convert.ToString(choice_ev.choice,2).PadRight(5,'0');
             sb.Append(str.Substring(str.Length-5)) ;
         }
         sb.Append(",");
@@ -434,7 +433,7 @@ struct Score {
         
     public static u8 yahtzee(DieVals sorted_dievals){ 
         if (sorted_dievals[0]==0) return 0 ; 
-        return (u8)(sorted_dievals[1] == sorted_dievals[5]? 50 : 0) ;
+        return (u8)(sorted_dievals[0] == sorted_dievals[4]? 50 : 0) ;
     }
 
     // reports the score for a set of dice in a given slot w/o regard for exogenous gamestate (bonuses, yahtzee wildcards etc) 
@@ -478,8 +477,7 @@ struct App{
 
     static void output_state_choice(GameState state, ChoiceEV choice_ev){ 
         // Uncomment below for more verbose progress output at the expense of speed 
-        // WriteLine(state, choice_ev, Thread.CurrentThread.Name ); //.printed(state, choice_ev)
-        print_state_choice(state,choice_ev);
+        // print_state_choice(state,choice_ev);
     } 
 
     //-------------------------------------------------------------
