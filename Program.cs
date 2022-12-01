@@ -31,7 +31,7 @@ using Slot = System.Byte;
 // var dv = new DieVals(1,2,3,4,5); 
 // foreach (var d in dv) Console.WriteLine(d);
 char[] arr = new char[] {'a', 'b', 'c'};
-var output = arr.perms();
+var output = arr.enumerate();
 var slots = new Slots(1,2,3,10);
 // var doeshave = slots.has(2); 
 // var tots = Slots.useful_upper_totals(slots);
@@ -42,10 +42,13 @@ var slots = new Slots(1,2,3,10);
 
 
 Init();//blech
-var state = new GameState(new DieVals(1,2,3,4,5), new Slots(2), 0, 1, false);
-var app = new App(state);
+var game = new GameState(new DieVals(3,4,4,6,6), new Slots(6,12), 0, 1, false);
+var app = new App(game);
 app.build_cache();
-WriteLine(app.ev_cache[state.id]);
+var result = app.ev_cache[game.id];
+WriteLine();
+WriteLine();
+WriteLine(result.ev);
 
 // main();
 
@@ -53,6 +56,7 @@ WriteLine(app.ev_cache[state.id]);
 // MAIN 
 //-------------------------------------------------------------
 void main() {
+    Init();//blech
     print_state_choices_header();
     var game = new GameState( 
         new DieVals(), // five unrolled dice
@@ -87,7 +91,7 @@ class Statics {
     public static f32[,] OUTCOME_EVS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
     public static u16[,] NEWVALS_DATA_BUFFER = new u16[1683,Environment.ProcessorCount]; 
     public static f32[,] EVS_TIMES_ARRANGEMENTS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
-    public static DieValsID[] SORTED_DIEVALS= sorted_dievals();
+    public static DieValsID[] SORTED_DIEVALS= new DieValsID[32767];
     public static int[] RANGE_IDX_FOR_SELECTION=new int[] {0,1,2,3,7,4,8,11,17,5,9,12,20,14,18,23,27,6,10,13,19,15,21,24,28,16,22,25,29,26,30,31}; 
     public static IEnumerable[] SELECTION_RANGES= selection_ranges(); 
     public static Outcome[] OUTCOMES= new Outcome[1683] ;   
@@ -96,6 +100,7 @@ class Statics {
     public static f32[] OUTCOME_ARRANGEMENTS= new f32[1683] ;
 
     public static void Init() { // TODO best way?
+        cache_sorted_dievals(); 
         cache_roll_outcomes_data(); 
     }
 
@@ -133,24 +138,17 @@ class Statics {
 
     // for fast access later, this generates an array of dievals in sorted form, 
     // along with each's unique "ID" between 0-252, indexed by DieVals.data
-    private static DieValsID[] sorted_dievals() { 
-        var vec = new DieValsID[32767];
-        vec[0] = new DieValsID(); // first one is for the special wildcard 
+    private static void cache_sorted_dievals() { 
+        SORTED_DIEVALS[0] = new DieValsID(); // first one is for the special wildcard 
         u8[] one_to_six = (from x in Range(1,6) select (u8)(x)).ToArray();
-        u8 i=0;
         var combos = one_to_six.combos_with_rep(5);
-        foreach (var combo in combos) {
-            foreach (var perm in combo.perms().Distinct()) {
-                var dv_perm = new DieVals(perm[0], perm[1], perm[2], perm[3], perm[4]);
-                var dv_combo = new DieVals(combo[0], combo[1], combo[2], combo[3], combo[4]);
-                vec[dv_perm.data] = new DieValsID(dv_combo, i);
+        foreach (var (i, combo) in combos.enumerate()) {
+            var dv_combo = new DieVals(combo);
+            foreach (var perm in combo.perms().Select(x=>new DieVals(x)).Distinct()) {
+                SORTED_DIEVALS[perm.data] = new DieValsID(dv_combo, (u8)i);
             }
         }
-        return vec;
     }
-
-    //enables syntax like: foreach (var (j, val) in enumerate(list)) { ... }
-    public static IEnumerable<(int index, T value)> enumerate<T>(IEnumerable<T> coll) => coll.Select((i, val) => (val, i));
 
     public static uint factorial(uint n) { 
         if (n<=1) return 1; 
@@ -179,7 +177,7 @@ class Statics {
             DieVal[] dievals_vec = new DieVal[5];
             foreach (u8[] dievals_combo_vec in one_thru_six.combos_with_rep(idx_combo_vec.Count)){
                 var mask_vec = new u8[]{0b111,0b111,0b111,0b111,0b111};
-                foreach( var (j, val) in enumerate(dievals_combo_vec) ){
+                foreach( var (j, val) in dievals_combo_vec.enumerate() ){
                     var idx = idx_combo_vec[j]-1;
                     dievals_vec[idx] = (DieVal)val; 
                     mask_vec[idx]=(DieVal)0;
@@ -232,6 +230,9 @@ class Statics {
 }
 
 public static class Extensions { 
+
+    //enables syntax like: foreach (var (j, val) in list.enumerate()) { ... }
+    public static IEnumerable<(int index, T value)> enumerate<T>(this IEnumerable<T> coll) => coll.Select((i, val) => (val, i));
 
     public static IEnumerable<IEnumerable<T>> Combinations<T>(this IEnumerable<T> them, int n) {
     if (n == 0) return new[] { new T[0] } ;
@@ -320,24 +321,6 @@ struct GameState {
         this.yahtzee_bonus_avail = yahtzee_bonus_avail;
     } 
 
-    // # combines all GameState field bits to form a unique GameState ID
-    // Base.hash(self::GameState, h::UInt) = 
-    //     hash(
-    //         self.sorted_dievals.data, hash(
-    //             self.open_slots.data, hash(
-    //                 self.upper_total, hash(
-    //                     self.rolls_remaining, hash(
-    //                         self.yahtzee_bonus_avail, h
-    //     )))))
-
-    // Base.isequal(self::GameState, other::GameState) = 
-    //     isequal(self.sorted_dievals.data, other.sorted_dievals.data) && 
-    //     isequal(self.open_slots.data, other.open_slots.data) && 
-    //     isequal(self.upper_total, other.upper_total) && 
-    //     isequal(self.rolls_remaining, other.rolls_remaining) && 
-    //     isequal(self.yahtzee_bonus_avail, other.yahtzee_bonus_avail) 
-
- 
     // calculate relevant counts for gamestate: required lookups and saves
     public (int, int) counts() { 
         var lookups = 0; 
@@ -445,7 +428,7 @@ struct Score {
     public static u8 fullhouse(DieVals sorted_dievals){ 
         var valcounts1 = 0; var valcounts2 = 0;
         var j=0;
-        foreach ( var (i,val) in enumerate(sorted_dievals)) { 
+        foreach ( var (i,val) in sorted_dievals.enumerate()) { 
             if (val==0) return (u8)0 ;
             if (j==0 || sorted_dievals[i]!=sorted_dievals[i-1]) j+=1; 
             if (j==1) valcounts1+=1; 
@@ -552,7 +535,7 @@ struct App{
                     foreach (var yahtzee_bonus_available in joker_rules_in_play? false_true: just_false){ // bonus always unavailable unless yahtzees are wild first
 
                         var ticks = 848484; //dice selection cache reads =# + (252 * slots_len * (2-(slots_len==1)) ) #= slot selection cache reads =#
-                        // update!(self.bar, self.bar.counter + ticks) # advance the progress bar by the number of cache reads coming up for dice selection 
+                        bar.Tick(bar.CurrentTick + ticks); // advance the progress bar by the number of cache reads coming up for dice selection 
 
                         // # for each rolls remaining
                         foreach (u8 rolls_remaining in new u8[]{0,1,2,3}) {
@@ -724,8 +707,9 @@ struct App{
 
 struct DieValsID { 
     public DieValsID(DieVals dievals, u8 id){ this.dievals = dievals; this.id = id; }
-    public DieVals dievals = new DieVals(); 
-    public u8 id = 0;
+    public DieValsID(){ this.dievals = new DieVals(); this.id = 0; }
+    public DieVals dievals ; 
+    public u8 id;
 }
 
 //-------------------------------------------------------------
@@ -741,7 +725,7 @@ struct ChoiceEV {
 //#=-------------------------------------------------------------
 //DieVals
 //-------------------------------------------------------------=#
-struct DieVals : IReadOnlyList<DieVal>{// AbstractArray{DieVal, 1} 
+struct DieVals : IReadOnlyList<DieVal>{ // TODO some way to make this lightweight like Julia struct without the iterator baggage?
     public u16 data=0;// 5 dievals, each from 0 to 6, can be encoded in 2 bytes total, each taking 3 bits
     private int idx =0;
     public int Count => 5;
