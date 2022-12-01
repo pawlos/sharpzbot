@@ -28,24 +28,25 @@ using Slot = System.Byte;
 //--------------------------------------------------
 // Test code 
 // -------------------------------------------------
+//...
 
-Init();//blech
-var game = new GameState(new DieVals(3,4,4,6,6), new Slots(6,12), 0, 2, false);
-var app = new App(game);
-app.build_cache();
-var result = app.ev_cache[game.id];
-WriteLine();
-WriteLine();
-WriteLine();
-WriteLine(result.ev);
-
-// main();
+    var game = new GameState( 
+        new DieVals(3,4,4,6,6), // five unrolled dice
+        new Slots(4,5,6), // all slots remaining in an empty scorecard
+        0, // current upper section total
+        2, // rolls remaining
+        false // yahtzee bonus available? 
+    ); 
+    var app = new App(game);
+    app.build_cache();
+    WriteLine(app.ev_cache[game.id]); // 38.9117 per Julia
 
 //-------------------------------------------------------------
 // MAIN 
 //-------------------------------------------------------------
+// main();
+
 void main() {
-    Init();//blech
     print_state_choices_header();
     var game = new GameState( 
         new DieVals(), // five unrolled dice
@@ -62,8 +63,6 @@ void main() {
     app.build_cache();
     // # starting game state, should have expected value of 255.5896
 }
-
-
 
 //-------------------------------------------------------------
 //INITIALIZERS etc 
@@ -87,11 +86,6 @@ class Statics {
     public static u16[] OUTCOME_DIEVALS_DATA= new u16[1683];  //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
     public static u16[] OUTCOME_MASK_DATA= new u16[1683] ;
     public static f32[] OUTCOME_ARRANGEMENTS= new f32[1683] ;
-
-    public static void Init() { // TODO best way?
-        cache_sorted_dievals(); 
-        cache_roll_outcomes_data(); 
-    }
 
     // count of arrangements that can be formed from r selections, chosen from n items, 
     // where order DOES or DOESNT matter, and WITH or WITHOUT replacement, as specified.
@@ -127,7 +121,7 @@ class Statics {
 
     // for fast access later, this generates an array of dievals in sorted form, 
     // along with each's unique "ID" between 0-252, indexed by DieVals.data
-    private static void cache_sorted_dievals() { 
+    public static void cache_sorted_dievals() { 
         SORTED_DIEVALS[0] = new DieValsID(); // first one is for the special wildcard 
         u8[] one_to_six = (from x in Range(1,6) select (u8)(x)).ToArray();
         var combos = one_to_six.combos_with_rep(5);
@@ -158,7 +152,7 @@ class Statics {
     } 
 
     //preps the caches of roll outcomes data for every possible 5-die selection, where '0' represents an unselected die """
-    private static void cache_roll_outcomes_data() { 
+    public static void cache_roll_outcomes_data() { 
         var i=0; 
         var idx_combos = Range(1,5).ToList().powerset(); 
         var one_thru_six = new u8[]{1,2,3,4,5,6};
@@ -312,7 +306,7 @@ struct GameState {
     } 
 
     // calculate relevant counts for gamestate: required lookups and saves
-    public (int, int) counts() { 
+    public int counts() { 
         var lookups = 0; 
         var saves = 0; 
         var false_true = new bool[] {true, false};
@@ -325,12 +319,12 @@ struct GameState {
                 var totals = Slots.useful_upper_totals(slots); 
                 foreach (var _ in totals) {
                     foreach (var __ in joker_rules? false_true : just_false ){
-                        var slot_lookups = (subset_len * subset_len==1? 1 : 2) * 252; // * subset_len as u64;
-                        var dice_lookups = 848484; // // previoiusly verified by counting up by 1s in the actual loop. however chunking forward is faster 
-                        lookups += dice_lookups + slot_lookups;
+                        // var slot_lookups = (subset_len * subset_len==1? 1 : 2) * 252; // * subset_len as u64;
+                        // var dice_lookups = 848484; // // previoiusly verified by counting up by 1s in the actual loop. however chunking forward is faster 
+                        // lookups += (dice_lookups + slot_lookups);
                         saves+=1;
         } } } }
-        return ( lookups, saves ) ;
+        return saves;
     } 
 
     public u8 score_first_slot_in_context() { 
@@ -467,11 +461,19 @@ struct App{
 
     // return a newly initialized app
     public App(GameState game) {
-        var (lookups, saves) = game.counts();
-        var bar = new ProgressBar(lookups,"",new ProgressBarOptions{ DenseProgressBar=true, CollapseWhenFinished=true, }); 
+        cache_sorted_dievals(); 
+        cache_roll_outcomes_data(); 
+        var ticks = game.counts();
         var ev_cache = new ChoiceEV[(int)Pow(2,30)]; // 2^30 slots hold all unique game states
         this.game = game;
         this.ev_cache = ev_cache;
+        var bar = new ProgressBar(ticks,"",new ShellProgressBar.ProgressBarOptions{ 
+            // DenseProgressBar=true, 
+            // CollapseWhenFinished=true, 
+            DisplayTimeInRealTime=false,
+            ProgressBarOnBottom=true,
+            ShowEstimatedDuration=true,
+        }); 
         this.bar = bar;
     } 
 
@@ -523,8 +525,7 @@ struct App{
                     // for each yahtzee bonus possibility 
                     foreach (var yahtzee_bonus_available in joker_rules_in_play? false_true: just_false){ // bonus always unavailable unless yahtzees are wild first
 
-                        var ticks = 848484; //dice selection cache reads =# + (252 * slots_len * (2-(slots_len==1)) ) #= slot selection cache reads =#
-                        bar.Tick(bar.CurrentTick + ticks); // advance the progress bar by the number of cache reads coming up for dice selection 
+                        bar.Tick(bar.CurrentTick + 1); // advance the progress bar 
 
                         // # for each rolls remaining
                         foreach (u8 rolls_remaining in new u8[]{0,1,2,3}) {
