@@ -744,6 +744,7 @@ struct ChoiceEV {
     public Choice choice;
     public float ev;
     public ChoiceEV(Choice choice, float ev){ this.choice = choice; this.ev = ev; }
+    public override string ToString() { return $"ChoiceEV({choice},{ev})"; } 
 }
 
 //#=-------------------------------------------------------------
