@@ -108,24 +108,6 @@ class Statics {
         cache_roll_outcomes_data(); 
     }
 
-    public static List<List<T>> powerset<T> (List<T> set) {
-        int size = set.Count;
-        uint setsize = (uint)Pow(2,size);//set_size of power set of a set with set_size n is (2**n -1)
-        int i, j;
-        var outerList = new List<List<T>>(); 
-        for (i = 0; i < setsize; i++) {// Run from counter 000..0 to 111..1
-            var innerList = new List<T>(); // Check each jth bit in the counter is set If set then add jth element from set 
-            for (j = 0; j < size; j++) if ((i & (1 << j)) > 0) innerList.Add(set[j]);
-            outerList.Add(innerList);
-        }
-        return outerList;
-    }
-
-    public static uint factorial(uint n) { 
-        if (n<=1) return 1; 
-        return n * factorial(n);
-    }
-
     // count of arrangements that can be formed from r selections, chosen from n items, 
     // where order DOES or DOESNT matter, and WITH or WITHOUT replacement, as specified.
     public static uint n_take_r(uint n, uint r, bool order_matters=false, bool with_replacement=false) {  
@@ -146,7 +128,7 @@ class Statics {
         var sel_ranges = new IEnumerable[32];
         int s = 1;
         sel_ranges[0] = Range(0,1);
-        var combos = powerset<int>(new List<int>() {0,1,2,3,4});
+        var combos = (new List<int>(){0,1,2,3,4}).powerset();
 
         int i = 0;
         foreach (var combo in combos) {
@@ -179,6 +161,11 @@ class Statics {
     //enables syntax like: foreach (var (j, val) in enumerate(list)) { ... }
     public static IEnumerable<(int index, T value)> enumerate<T>(IEnumerable<T> coll) => coll.Select((i, val) => (val, i));
 
+    public static uint factorial(uint n) { 
+        if (n<=1) return 1; 
+        return n * factorial(n-1);
+    }
+
     private static f32 distinct_arrangements_for(DieVal[] dieval_vec) { 
         var key_counts = dieval_vec.GroupBy(x=>x).Select(g=>(g.Key, (u8)g.Count()));
         uint divisor=1;
@@ -195,15 +182,14 @@ class Statics {
     //preps the caches of roll outcomes data for every possible 5-die selection, where '0' represents an unselected die """
     private static void cache_roll_outcomes_data() { 
         var i=0; 
-        var idx_combos = powerset(Range(1,5).ToList()); 
+        var idx_combos = Range(1,5).ToList().powerset(); 
         var one_thru_six = new u8[]{1,2,3,4,5,6};
         foreach (var idx_combo_vec in idx_combos) { 
             DieVal[] dievals_vec = new DieVal[5];
             foreach (u8[] dievals_combo_vec in one_thru_six.combos_with_rep(idx_combo_vec.Count)){
-                i++;
                 var mask_vec = new u8[]{0b111,0b111,0b111,0b111,0b111};
                 foreach( var (j, val) in enumerate(dievals_combo_vec) ){
-                    var idx = idx_combo_vec[j] ;
+                    var idx = idx_combo_vec[j]-1;
                     dievals_vec[idx] = (DieVal)val; 
                     mask_vec[idx]=(DieVal)0;
                 } 
@@ -212,6 +198,7 @@ class Statics {
                 OUTCOME_MASK_DATA[i] = (new DieVals(mask_vec)).data;
                 OUTCOME_ARRANGEMENTS[i] = arrangement_count;
                 OUTCOMES[i]= new Outcome( new DieVals(dievals_vec), new DieVals(mask_vec), arrangement_count);
+                i++;
             } 
         } 
     } 
@@ -298,6 +285,19 @@ public static class Extensions {
                 combos_until(ref output, current, given, i + 1, combo_len, j, j_end);
             }
         }
+    }
+
+    public static List<List<T>> powerset<T> (this List<T> set) {
+        int size = set.Count;
+        uint setsize = (uint)Pow(2,size);//set_size of power set of a set with set_size n is (2**n -1)
+        int i, j;
+        var outerList = new List<List<T>>(); 
+        for (i = 0; i < setsize; i++) {// Run from counter 000..0 to 111..1
+            var innerList = new List<T>(); // Check each jth bit in the counter is set If set then add jth element from set 
+            for (j = 0; j < size; j++) if ((i & (1 << j)) > 0) innerList.Add(set[j]);
+            outerList.Add(innerList);
+        }
+        return outerList;
     }
 
 
@@ -506,7 +506,7 @@ struct App{
     public App(GameState game) {
         var (lookups, saves) = game.counts();
         var bar = new ProgressBar(lookups,"...",ConsoleColor.Gray); 
-        var ev_cache = new ChoiceEV[2^30]; // 2^30 bits hold all unique game states
+        var ev_cache = new ChoiceEV[2^30]; // 2^30 slots hold all unique game states
         this.game = game;
         this.ev_cache = ev_cache;
         this.bar = bar;
