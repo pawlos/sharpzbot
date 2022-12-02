@@ -30,16 +30,10 @@ using Slot = System.Byte;
 // -------------------------------------------------
 //...
 
-    var game = new GameState( 
-        new DieVals(3,4,4,6,6), // five unrolled dice
-        new Slots(4,5,6), // all slots remaining in an empty scorecard
-        0, // current upper section total
-        2, // rolls remaining
-        false // yahtzee bonus available? 
-    ); 
+    var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); // should be 0.833..
     var app = new App(game);
     app.build_cache();
-    WriteLine(app.ev_cache[game.id]); // 38.9117 per Julia
+    WriteLine(app.ev_cache[game.id]); 
 
 //-------------------------------------------------------------
 // MAIN 
@@ -479,7 +473,7 @@ struct App{
 
     static void output_state_choice(GameState state, ChoiceEV choice_ev){ 
         // Uncomment below for more verbose progress output at the expense of speed 
-        // print_state_choice(state,choice_ev);
+        print_state_choice(state,choice_ev);
     } 
 
     //-------------------------------------------------------------
