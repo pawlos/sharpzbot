@@ -30,7 +30,11 @@ using Slot = System.Byte;
 // -------------------------------------------------
 //...
 
-    var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); // should be 0.833..
+    // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); // should be 0.833..
+    // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(4,5,6), 0, 2, false ); // should be 38.9117 
+    var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1,2,8,9,10,11,12,13), 0, 2, false ); // should be 137.3749
+    // var a = Score.sm_str8(new DieVals(1,2,3,4,6));
+    // var game = new GameState( dv, new Slots(SM_STRAIGHT), 0, 0, false ); 
     var app = new App(game);
     app.build_cache();
     WriteLine(game.id); 
@@ -72,8 +76,8 @@ class Statics {
     // a single scorecard slot with values ranging from ACES to CHANCE 
     public const byte ACES = 0x1; public const byte TWOS = 0x2; public const byte THREES = 0x3; 
     public const byte FOURS = 0x4; public const byte FIVES = 0x5; public const byte SIXES = 0x6;
-    public const byte SM_STRAIGHT = 0xA; public const byte LG_STRAIGHT = 0xB; public const byte YAHTZEE = 0xC; public const byte CHANCE = 0xD;
     public const byte THREE_OF_A_KIND = 0x7; public const byte FOUR_OF_A_KIND = 0x8; public const byte FULL_HOUSE = 0x9; 
+    public const byte SM_STRAIGHT = 0xA; public const byte LG_STRAIGHT = 0xB; public const byte YAHTZEE = 0xC; public const byte CHANCE = 0xD;
 
 
     public static f32[,] OUTCOME_EVS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
@@ -312,8 +316,7 @@ struct GameState {
 
     // calculate relevant counts for gamestate: required lookups and saves
     public int counts() { 
-        var lookups = 0; 
-        var saves = 0; 
+        var ticks = 0; 
         var false_true = new bool[] {true, false};
         var just_false = new bool[] {false};
         foreach (var subset_len in Range(1,open_slots.Count)){
@@ -326,10 +329,10 @@ struct GameState {
                     foreach (var __ in joker_rules? false_true : just_false ){
                         // var slot_lookups = (subset_len * subset_len==1? 1 : 2) * 252; // * subset_len as u64;
                         // var dice_lookups = 848484; // // previoiusly verified by counting up by 1s in the actual loop. however chunking forward is faster 
-                        // lookups += (dice_lookups + slot_lookups);
-                        saves+=1;
+                        // lookups += (dice_lookups + slot_lookups); this tends to overflow so use "normalized" ticks below
+                        ticks++; // this just counts the cost of one pass through the bar.tick call in the dice-choose section of build_cache() loop
         } } } }
-        return saves;
+        return (int)ticks;
     } 
 
     public u8 score_first_slot_in_context() { 
@@ -410,7 +413,7 @@ struct Score {
         
     public static u8 three_of_a_kind(DieVals sorted_dievals)  { return n_of_a_kind(0x3,sorted_dievals);} 
     public static u8 four_of_a_kind(DieVals sorted_dievals)   { return n_of_a_kind(0x4,sorted_dievals);} 
-    public static u8 sm_str8(DieVals sorted_dievals)          { return (u8)(straight_len(sorted_dievals)>4? 30 : 0);}
+    public static u8 sm_str8(DieVals sorted_dievals)          { return (u8)(straight_len(sorted_dievals)>=4? 30 : 0);}
     public static u8 lg_str8(DieVals sorted_dievals)          { return (u8)(straight_len(sorted_dievals)==5? 40 : 0);}
 
     // The official rule is that a Full House is "three of one number and two of another
@@ -482,7 +485,7 @@ struct App{
 
     static void output_state_choice(GameState state, ChoiceEV choice_ev){ 
         // Uncomment below for more verbose progress output at the expense of speed 
-        print_state_choice(state,choice_ev);
+        // print_state_choice(state,choice_ev);
     } 
 
     //-------------------------------------------------------------
