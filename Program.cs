@@ -33,7 +33,13 @@ using Slot = System.Byte;
     var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); // should be 0.833..
     var app = new App(game);
     app.build_cache();
+    WriteLine(game.id); 
     WriteLine(app.ev_cache[game.id]); 
+
+    // var game1 = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); //134217984 
+    // WriteLine(game1.id);
+    // var game2 = new GameState( new DieVals(0,0,0,0,0), new Slots(1), 0, 1, false ); //134217984 
+    // WriteLine(game2.id);
 
 //-------------------------------------------------------------
 // MAIN 
@@ -80,6 +86,11 @@ class Statics {
     public static u16[] OUTCOME_DIEVALS_DATA= new u16[1683];  //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
     public static u16[] OUTCOME_MASK_DATA= new u16[1683] ;
     public static f32[] OUTCOME_ARRANGEMENTS= new f32[1683] ;
+
+    static Statics() { // static constructor
+        cache_sorted_dievals(); 
+        cache_roll_outcomes_data(); 
+    }
 
     // count of arrangements that can be formed from r selections, chosen from n items, 
     // where order DOES or DOESNT matter, and WITH or WITHOUT replacement, as specified.
@@ -185,7 +196,7 @@ class Statics {
     // S,13,66641,0,11,Y,3_4_5_9_10_13_,113.45208
     const string Y="Y"; const string N="N"; const string S="S"; const string D="D"; const string C=",";
     public static void print_state_choice(GameState state, ChoiceEV choice_ev) { 
-        var sb = new StringBuilder("", 50);
+        var sb = new StringBuilder("", 60);
         if (state.rolls_remaining==0){ // for slot choice 
             sb.Append(S); sb.Append(C);
             sb.Append(choice_ev.choice); // for dice choice 
@@ -201,6 +212,7 @@ class Statics {
         sb.Append(state.yahtzee_bonus_avail ? Y : N); sb.Append(C);
         sb.Append(state.open_slots.ToString()); sb.Append(C);
         sb.Append(choice_ev.ev);
+        sb.Append(C); sb.Append(state.id);
         WriteLine(sb);
     } 
 
@@ -285,8 +297,8 @@ struct GameState {
     public bool yahtzee_bonus_avail;// = 1bit = 2     "
 
     public GameState(DieVals sorted_dievals, Slots open_slots, u8 upper_total, u8 rolls_remaining, bool yahtzee_bonus_avail) { 
-        u32 dievals_id = SORTED_DIEVALS[sorted_dievals.data].id; // this is the 8-bit encoding of self.sorted_dievals
-        id= dievals_id |                 // self.id will use 30 bits total...
+        u8 dievals_id = SORTED_DIEVALS[sorted_dievals.data].id; // this is the 8-bit encoding of self.sorted_dievals
+        this.id= dievals_id |                 // self.id will use 30 bits total...
             ( (u32)(open_slots.data)        << 7)  | // slots.data doesn't use its rightmost bit so we only shift 7 to make room for the 8-bit dieval_id above 
             ( (u32)(upper_total)            << 21) | // make room for 13+8 bit stuff above 
             ( (u32)(rolls_remaining)        << 27) | // make room for the 13+8+6 bit stuff above
@@ -454,8 +466,6 @@ struct App{
 
     // return a newly initialized app
     public App(GameState game) {
-        cache_sorted_dievals(); 
-        cache_roll_outcomes_data(); 
         var ticks = game.counts();
         var ev_cache = new ChoiceEV[(int)Pow(2,30)]; // 2^30 slots hold all unique game states
         this.game = game;
