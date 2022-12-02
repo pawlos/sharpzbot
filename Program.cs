@@ -180,27 +180,26 @@ class Statics {
         WriteLine("choice_type,choice,dice,rolls_remaining,upper_total,yahtzee_bonus_avail,open_slots,expected_value");
     } 
 
-    // private static String[] SLOT_CODES = new String[] {"1S","2S","3S","4S","5S","6S","3K","4K","FH","SS","LS","YZ","CH"};
-
     // should produce one line of output kinda like ...
     // D,01111,65411,2,31,Y,1_3_4_6_7_8_11_,119.23471
     // S,13,66641,0,11,Y,3_4_5_9_10_13_,113.45208
+    const string Y="Y"; const string N="N"; const string S="S"; const string D="D"; const string C=",";
     public static void print_state_choice(GameState state, ChoiceEV choice_ev) { 
         var sb = new StringBuilder("", 50);
         if (state.rolls_remaining==0){ // for slot choice 
-            sb.Append("S"); sb.Append(",");
+            sb.Append(S); sb.Append(C);
             sb.Append(choice_ev.choice); // for dice choice 
         } else {
-            sb.Append("D"); sb.Append(",");
+            sb.Append(D); sb.Append(C);
             var str = Convert.ToString(choice_ev.choice,2).PadRight(5,'0');
             sb.Append(str.Substring(str.Length-5)) ;
         }
-        sb.Append(",");
-        sb.Append(state.sorted_dievals.ToString()); sb.Append(",");
-        sb.Append(state.rolls_remaining); sb.Append(",");
-        sb.Append(state.upper_total); sb.Append(",");
-        sb.Append(state.yahtzee_bonus_avail ? 1 : 0); sb.Append(",");
-        sb.Append(state.open_slots.ToString()); sb.Append(",");
+        sb.Append(C);
+        sb.Append(state.sorted_dievals.ToString()); sb.Append(C);
+        sb.Append(state.rolls_remaining); sb.Append(C);
+        sb.Append(state.upper_total); sb.Append(C);
+        sb.Append(state.yahtzee_bonus_avail ? Y : N); sb.Append(C);
+        sb.Append(state.open_slots.ToString()); sb.Append(C);
         sb.Append(choice_ev.ev);
         WriteLine(sb);
     } 
