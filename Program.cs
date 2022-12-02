@@ -732,9 +732,7 @@ struct DieVals : IReadOnlyList<DieVal>{ // TODO some way to make this lightweigh
     }
 
     public override string ToString() { 
-        var sb = new StringBuilder(5);
-        foreach (var dieval in this) { sb.Append(dieval.ToString()); }
-        return sb.ToString(); 
+        return $"{this[4]}{this[3]}{this[2]}{this[1]}{this[0]}";
     }
 }
 
