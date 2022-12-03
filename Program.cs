@@ -34,7 +34,7 @@ using Slot = System.Byte;
     // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(4,5,6), 0, 2, false ); // should be 38.9117 
     var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1,2,8,9,10,11,12,13), 0, 2, false ); // should be 137.3749
     // var a = Score.sm_str8(new DieVals(1,2,3,4,6));
-    // var game = new GameState( dv, new Slots(SM_STRAIGHT), 0, 0, false ); 
+    // var game = g GameState( dv, new Slots(SM_STRAIGHT), 0, 0, false ); 
     var app = new App(game);
     app.build_cache();
     WriteLine(game.id); 
@@ -85,7 +85,7 @@ class Statics {
     public static f32[,] EVS_TIMES_ARRANGEMENTS_BUFFER = new f32[1683,Environment.ProcessorCount]; 
     public static DieValsID[] SORTED_DIEVALS= new DieValsID[32767];
     public static int[] RANGE_IDX_FOR_SELECTION=new int[] {0,1,2,3,7,4,8,11,17,5,9,12,20,14,18,23,27,6,10,13,19,15,21,24,28,16,22,25,29,26,30,31}; 
-    public static IEnumerable[] SELECTION_RANGES= selection_ranges(); 
+    public static Range[] SELECTION_RANGES= selection_ranges(); 
     public static Outcome[] OUTCOMES= new Outcome[1683] ;   
     public static u16[] OUTCOME_DIEVALS_DATA= new u16[1683];  //these 3 arrays mirror that in OUTCOMES but are contiguous and faster to access
     public static u16[] OUTCOME_MASK_DATA= new u16[1683] ;
@@ -112,16 +112,16 @@ class Statics {
     }
 
     // this generates the ranges that correspond to the outcomes, within the set of all outcomes, indexed by a give selection 
-    private static IEnumerable[] selection_ranges() {
-        var sel_ranges = new IEnumerable[32];
+    private static Range[] selection_ranges() {
+        var sel_ranges = new Range[32];
         int s = 0;
-        sel_ranges[0] = Range(0,1);
+        sel_ranges[0] = 0..1;
         var combos = (new List<int>(){0,1,2,3,4}).powerset();
 
         int i = 0;
         foreach (var combo in combos) {
             var count = (int) n_take_r(6, (uint)combo.Count, order_matters: false, with_replacement: true);
-            sel_ranges[i] = Range(s,count);// s..(s + count - 1);
+            sel_ranges[i] = s..(s + count);
             s += count;
             i++;
         } 
@@ -185,7 +185,7 @@ class Statics {
     } 
 
     // returns a range which corresponds the precomputed dice roll outcome data corresponding to the given selection
-    public static IEnumerable outcomes_range_for_selection(Selection selection) {
+    public static Range outcomes_range_for_selection(Selection selection) {
         var idx = RANGE_IDX_FOR_SELECTION[selection];
         var range = SELECTION_RANGES[idx]; // for @inbounds, see https://blog.tedd.no/2020/06/01/faster-c-array-access/
         return range;
@@ -495,7 +495,7 @@ struct App{
     // gather up expected values in a multithreaded bottom-up fashion. this is like.. the main thing
     public void build_cache() {
 
-        var all_dieval_combos =  from int i in outcomes_range_for_selection(0b11111) select OUTCOMES[i].dievals ; 
+        var all_dieval_combos =  OUTCOMES[outcomes_range_for_selection(0b11111)].ToArray().Select(x=>x.dievals); 
         var placeholder_dievals = new DieVals();
         var placeholder_dievals_vec = new DieVals[] {placeholder_dievals};
 
@@ -508,8 +508,8 @@ struct App{
             var joker_rules_in_play = (single_slot != YAHTZEE); // joker rules in effect when the yahtzee slot is not open 
             foreach (var yahtzee_bonus_available in joker_rules_in_play? false_true: just_false){ // yahtzee bonus -might- be available when joker rules are in play 
                 foreach (u8 upper_total in Slots.useful_upper_totals(all_unused_slots:slot)){
-                    foreach (var dieval_combo in all_dieval_combos){
-                        var state = new GameState(dieval_combo, slot, upper_total, 0, yahtzee_bonus_available);
+                    foreach (var outcome_combo in all_dieval_combos){
+                        var state = new GameState(outcome_combo, slot, upper_total, 0, yahtzee_bonus_available);
                         var score = state.score_first_slot_in_context();
                         var choice_ev = new ChoiceEV(single_slot, score);
                         ev_cache[state.id] = choice_ev;
@@ -665,7 +665,7 @@ struct App{
         var outcomes_arrangements_count = 0f;
         var range = outcomes_range_for_selection(selection);
     
-        foreach (int i in range) { //@inbounds @simd  
+        for (int i=range.Start.Value; i < range.End.Value; i++) { //@inbounds @simd
             NEWVALS_DATA_BUFFER[i, threadid] = (u16)(start_dievals.data & OUTCOME_MASK_DATA[i]);
             NEWVALS_DATA_BUFFER[i, threadid] |= OUTCOME_DIEVALS_DATA[i];
         } 
@@ -678,7 +678,7 @@ struct App{
             yahtzee_bonus_available 
         ).id;
 
-        foreach (int i in range ){ //@inbounds 
+        for (int i=range.Start.Value; i < range.End.Value; i++) { //@inbounds @simd
             //= gather sorted =#
                 var u = (u32)i;
                 u32 newvals_datum = NEWVALS_DATA_BUFFER[u, threadid];
@@ -689,7 +689,8 @@ struct App{
                 OUTCOME_EVS_BUFFER[u, threadid] = cache_entry.ev;
         } 
 
-        foreach(int i in range) {// we looped through die "combos" but we need to average all "perumtations" // @fastmath @inbounds @simd ivdep 
+        for (int i=range.Start.Value; i < range.End.Value; i++) { //@inbounds @simd
+        // foreach(int i in range) {// we looped through die "combos" but we need to average all "perumtations" // @fastmath @inbounds @simd ivdep 
             EVS_TIMES_ARRANGEMENTS_BUFFER[i, threadid] = OUTCOME_EVS_BUFFER[i, threadid] * OUTCOME_ARRANGEMENTS[i];
             total_ev_for_selection +=  EVS_TIMES_ARRANGEMENTS_BUFFER[i, threadid] ;
             outcomes_arrangements_count += OUTCOME_ARRANGEMENTS[i] ;
