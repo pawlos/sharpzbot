@@ -32,13 +32,13 @@ using Slot = System.Byte;
 
     // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); // should be 0.833..
     // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(4,5,6), 0, 2, false ); // should be 38.9117 
-    var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1,2,8,9,10,11,12,13), 0, 2, false ); // should be 137.3749
+    // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1,2,8,9,10,11,12,13), 0, 2, false ); // should be 137.3749
     // var a = Score.sm_str8(new DieVals(1,2,3,4,6));
     // var game = g GameState( dv, new Slots(SM_STRAIGHT), 0, 0, false ); 
-    var app = new App(game);
-    app.build_cache();
-    WriteLine(game.id); 
-    WriteLine(app.ev_cache[game.id]); 
+    // var app = new App(game);
+    // app.build_cache();
+    // WriteLine(game.id); 
+    // WriteLine(app.ev_cache[game.id]); 
 
     // var game1 = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); //134217984 
     // WriteLine(game1.id);
@@ -48,7 +48,6 @@ using Slot = System.Byte;
 //-------------------------------------------------------------
 // MAIN 
 //-------------------------------------------------------------
-// main();
 
 void main() {
     print_state_choices_header();
@@ -65,8 +64,10 @@ void main() {
     ); 
     var app = new App(game);
     app.build_cache();
-    // # starting game state, should have expected value of 255.5896
+    WriteLine(app.ev_cache[game.id]);  // # starting game state, should have expected value of 255.5896
 }
+
+main();
 
 //-------------------------------------------------------------
 //INITIALIZERS etc 
@@ -163,14 +164,14 @@ class Statics {
     //preps the caches of roll outcomes data for every possible 5-die selection, where '0' represents an unselected die """
     public static void cache_roll_outcomes_data() { 
         var i=0; 
-        var idx_combos = Range(1,5).ToList().powerset(); 
+        var idx_combos = Range(1,5).ToList().powerset(); // TODO this should be Range(0,5) for idxs 0 to 4, then remove -1 below 
         var one_thru_six = new u8[]{1,2,3,4,5,6};
         foreach (var idx_combo_vec in idx_combos) { 
             DieVal[] dievals_vec = new DieVal[5];
             foreach (u8[] dievals_combo_vec in one_thru_six.combos_with_rep(idx_combo_vec.Count)){
                 var mask_vec = new u8[]{0b111,0b111,0b111,0b111,0b111};
                 foreach( var (j, val) in dievals_combo_vec.enumerate() ){
-                    var idx = idx_combo_vec[j]-1;
+                    var idx = idx_combo_vec[j]-1; // TODO remove this -1 when idxs are 0 to 4
                     dievals_vec[idx] = (DieVal)val; 
                     mask_vec[idx]=(DieVal)0;
                 } 
@@ -702,11 +703,33 @@ struct App{
  
 }
 
+//-------------------------------------------------------------
+//DieValsID
+//-------------------------------------------------------------
 struct DieValsID { 
     public DieValsID(DieVals dievals, u8 id){ this.dievals = dievals; this.id = id; }
     public DieValsID(){ this.dievals = new DieVals(); this.id = 0; }
     public DieVals dievals ; 
     public u8 id;
+}
+
+//-------------------------------------------------------------
+// Outcome
+//-------------------------------------------------------------
+struct Outcome { 
+    public DieVals dievals;// = new DieVals();
+    public DieVals mask;// = new DieVals(); // stores a pre-made mask for blitting this outcome onto a GameState.DieVals.data u16 later
+    public f32 arrangements;// = 0; //# how many indistinguisable ways can these dievals be arranged (ie swapping identical dievals)
+    public Outcome() { 
+        this.dievals = new DieVals();
+        this.mask = new DieVals();
+        this.arrangements = 0;
+    }
+    public Outcome(DieVals dievals, DieVals mask, f32 arrangements) {
+        this.dievals = dievals;
+        this.mask = mask;
+        this.arrangements = arrangements;
+    }
 }
 
 //-------------------------------------------------------------
@@ -823,14 +846,14 @@ struct Slots : IReadOnlyList<Slot> {
     // a non-exact but fast estimate of relevant_upper_totals
     // ie the unique and relevant "upper bonus total" that could have occurred from the previously used upper slots
     public static IEnumerable<int> useful_upper_totals(Slots all_unused_slots) { 
-        var totals = from x in Range(0,63) select x; //(x for x in 0:63)
+        var totals = from x in Range(0,64) select x; // 0 to 63 inclusive
         var used_uppers = used_upper_slots(all_unused_slots);
         if (used_uppers.All(iseven))  {
             totals = from x in totals where iseven(x) select x;
         } 
         // filter out the lowish totals that aren't relevant because they can't reach the goal with the upper slots remaining 
         // this filters out a lot of dead state space but means the lookup function must later map extraneous deficits to a default 
-        int best_unused_slot_total = best_upper_total(all_unused_slots);
+        int best_unused_slot_total = all_unused_slots.best_upper_total();
         // totals = (x for x in totals if x + best_unused_slot_total >=63 || x==0)
         totals = from x in totals where (x + best_unused_slot_total >=63 || x==0) select x;
         return totals;
@@ -838,10 +861,7 @@ struct Slots : IReadOnlyList<Slot> {
 
     public u8 best_upper_total(){ 
         u8 sum=0;
-        foreach (var x in this) {  
-            if (6<x) break; 
-            sum+=x;
-        } 
+        foreach (var x in this) {  if (6<x) break; sum+=x; } 
         return (u8)(sum*5);
     } 
 
@@ -850,12 +870,6 @@ struct Slots : IReadOnlyList<Slot> {
         var all_upper_slot_bits = (u16) ((1<<7)-2);  // upper slot bits are those from 2^1 through 2^6 (.data encoding doesn't use 2^0)
         var previously_used_upper_slot_bits = (u16) (all_bits_except_unused_uppers & all_upper_slot_bits);
         return slotsFromData( previously_used_upper_slot_bits );
-    } 
-
-    public static u8 best_upper_total(Slots slots){  
-        u8 sum=0;
-        foreach (var s in slots) { if (6<s) break; sum+=s; } 
-        return (u8)(sum*5);
     } 
 
     public override string ToString() { 
@@ -867,21 +881,3 @@ struct Slots : IReadOnlyList<Slot> {
 
 }
 
-//-------------------------------------------------------------
-// Outcome
-//-------------------------------------------------------------
-struct Outcome { 
-    public DieVals dievals;// = new DieVals();
-    public DieVals mask;// = new DieVals(); // stores a pre-made mask for blitting this outcome onto a GameState.DieVals.data u16 later
-    public f32 arrangements;// = 0; //# how many indistinguisable ways can these dievals be arranged (ie swapping identical dievals)
-    public Outcome() { 
-        this.dievals = new DieVals();
-        this.mask = new DieVals();
-        this.arrangements = 0;
-    }
-    public Outcome(DieVals dievals, DieVals mask, f32 arrangements) {
-        this.dievals = dievals;
-        this.mask = mask;
-        this.arrangements = arrangements;
-    }
-}
