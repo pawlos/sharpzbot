@@ -52,7 +52,7 @@ void main() {
     ); 
     var app = new App(game);
     app.build_cache();
-    WriteLine(app.ev_cache[game.id]);  // # starting game state, should have expected value of 255.5896
+    WriteLine(app.ev_cache[game.id]);  // # starting game state, should have expected value of 254.59
 }
 
 main();
