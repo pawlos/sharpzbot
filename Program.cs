@@ -30,20 +30,8 @@ using Slot = System.Byte;
 // -------------------------------------------------
 //...
 
-    // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); // should be 0.833..
-    // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(4,5,6), 0, 2, false ); // should be 38.9117 
-    // var game = new GameState( new DieVals(3,4,4,6,6), new Slots(1,2,8,9,10,11,12,13), 0, 2, false ); // should be 137.3749
-    // var a = Score.sm_str8(new DieVals(1,2,3,4,6));
-    // var game = g GameState( dv, new Slots(SM_STRAIGHT), 0, 0, false ); 
-    // var app = new App(game);
-    // app.build_cache();
-    // WriteLine(game.id); 
-    // WriteLine(app.ev_cache[game.id]); 
-
-    // var game1 = new GameState( new DieVals(3,4,4,6,6), new Slots(1), 0, 1, false ); //134217984 
-    // WriteLine(game1.id);
-    // var game2 = new GameState( new DieVals(0,0,0,0,0), new Slots(1), 0, 1, false ); //134217984 
-    // WriteLine(game2.id);
+    // var slots = new Slots(2,4,6,8,12);
+    // WriteLine(slots[0]);
 
 //-------------------------------------------------------------
 // MAIN 
@@ -788,13 +776,14 @@ struct Slots : IReadOnlyList<Slot> {
         state=data;
     }
 
-    public Slot this[int i] {
+    public Slot this[int position] {
         get {
             // @assert(i<=length(self))
             var bits = data;
             var bit_index=0;
             var j=1;
-            while (j <= i){ //the slots.data does not use the rightmost (0th) bit; 
+            var i = position+1; //the slots.data does not use the rightmost (0th) bit; 
+            while (j <= i){ 
                 bit_index = TrailingZeroCount(bits);
                 bits = (u16)(bits & (~( 1 << bit_index) ));  //unset bit
                 j++;
