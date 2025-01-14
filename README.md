@@ -1,4 +1,7 @@
-## History of runs of the code
+## History of runs
+
+> [!NOTE]
+> Run are performed as a regular execution, nowhere near to be done in controlled environment; exact run values might not be repeatable
 
 Running original code with no changes:
 
